@@ -6,11 +6,16 @@ export class challenge_response extends Model<InferAttributes<challenge_response
     declare challenge_response_id: CreationOptional<number>;
     declare challenge_id: ForeignKey<number>;
     declare team_id: ForeignKey<number>;
-    declare idea_name: String;
+    declare others: String;
+    declare sdg: String;
     declare response: string;
     declare initiated_by: String;
-    declare submitted_by: String;
+    declare submitted_at: String;
+    declare evaluated_by: String;
+    declare evaluated_at: Date;
     declare status: Enumerator;
+    declare evaluation_status: Enumerator;
+    declare rejected_reason: String;
     declare created_by: number;
     declare created_at: Date;
     declare updated_by: number;
@@ -37,7 +42,11 @@ challenge_response.init(
             type: DataTypes.INTEGER,
             allowNull: false
         },
-        idea_name: {
+        others: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        sdg: {
             type: DataTypes.STRING,
             allowNull: true
         },
@@ -53,8 +62,24 @@ challenge_response.init(
             type: DataTypes.INTEGER,
             allowNull: true
         },
-        submitted_by: {
+        submitted_at: {
+            type: DataTypes.DATE(),
+            allowNull: true
+        },
+        evaluated_by: {
             type: DataTypes.INTEGER,
+            allowNull: true
+        },
+        evaluated_at: {
+            type: DataTypes.DATE,
+            allowNull: true
+        },
+        evaluation_status: {
+            type: DataTypes.ENUM(...Object.values(constents.evaluation_status.list)),
+            allowNull: true
+        },
+        rejected_reason: {
+            type: DataTypes.TEXT,
             allowNull: true
         },
         status: {

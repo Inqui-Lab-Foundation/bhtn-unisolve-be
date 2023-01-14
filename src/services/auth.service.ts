@@ -7,7 +7,7 @@ import CRUDService from "./crud.service";
 import { baseConfig } from '../configs/base.config';
 import { speeches } from '../configs/speeches.config';
 import { admin } from "../models/admin.model";
-import { evaluater } from "../models/evaluater.model";
+import { evaluator } from "../models/evaluator.model";
 import { mentor } from "../models/mentor.model";
 import { organization } from '../models/organization.model';
 import { student } from "../models/student.model";
@@ -44,8 +44,7 @@ export default class authService {
                     status: {
                         [Op.or]: ['ACTIVE', 'NEW']
                     }
-                },
-                include: {
+                }, include: {
                     model: mentor,
                     attributes: [
                         "mentor_id",
@@ -99,18 +98,18 @@ export default class authService {
             if (user_data) {
                 throw badRequest('Email');
             } else {
-                const mentor_data = await this.crudService.findOne(mentor, { where: { mobile: requestBody.mobile } })
-                if (mentor_data) {
-                    throw badRequest('Mobile')
-                } else {
-                    let createUserAccount = await this.crudService.create(user, requestBody);
-                    let conditions = { ...requestBody, user_id: createUserAccount.dataValues.user_id };
-                    let createMentorAccount = await this.crudService.create(mentor, conditions);
-                    createMentorAccount.dataValues['username'] = createUserAccount.dataValues.username;
-                    createMentorAccount.dataValues['user_id'] = createUserAccount.dataValues.user_id;
-                    response = createMentorAccount;
-                    return response;
-                }
+                // const mentor_data = await this.crudService.findOne(mentor, { where: { mobile: requestBody.mobile } })
+                // if (mentor_data) {
+                //     throw badRequest('Mobile')
+                // } else {
+                let createUserAccount = await this.crudService.create(user, requestBody);
+                let conditions = { ...requestBody, user_id: createUserAccount.dataValues.user_id };
+                let createMentorAccount = await this.crudService.create(mentor, conditions);
+                createMentorAccount.dataValues['username'] = createUserAccount.dataValues.username;
+                createMentorAccount.dataValues['user_id'] = createUserAccount.dataValues.user_id;
+                response = createMentorAccount;
+                return response;
+                // }
             }
         } catch (error) {
             return error;
@@ -142,11 +141,14 @@ export default class authService {
                         break;
                     } else return false;
                 }
-                case 'EVALUATER': {
-                    profile = await this.crudService.create(evaluater, whereClass);
+                case 'EVALUATOR': {
+                    profile = await this.crudService.create(evaluator, whereClass);
                     break;
                 }
                 case 'ADMIN':
+                    profile = await this.crudService.create(admin, whereClass);
+                    break;
+                case 'EADMIN':
                     profile = await this.crudService.create(admin, whereClass);
                     break;
                 default:
@@ -386,6 +388,57 @@ export default class authService {
         } catch (error: any) {
             return error
         }
+    };
+    async triggerEmail(email: any) {
+        const result: any = {}
+        const otp: any = Math.random().toFixed(6).substr(-6);
+
+        AWS.config.update({
+            region: process.env.AWS_REGION,
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+        });
+        let params = {
+            Destination: { /* required */
+                CcAddresses: [
+                ],
+                ToAddresses: [
+                    email
+                ]
+            },
+            Message: { /* required */
+                Body: { /* required */
+                    Html: {
+                        Charset: "UTF-8",
+                        Data: `Your temporary password to log-in is <B>${otp}</B> - UNISOLVE`
+                    },
+                    Text: {
+                        Charset: "UTF-8",
+                        Data: "TEXT_FOR MAT_BODY"
+                    }
+                },
+                Subject: {
+                    Charset: 'UTF-8',
+                    Data: 'UNISOLVE OTP SERVICES'
+                }
+            },
+            Source: "unisolvebhutan@inqui-lab.org", /* required */
+            ReplyToAddresses: [],
+        };
+        try {
+            // Create the promise and SES service object
+            let sendPromise = new AWS.SES({ apiVersion: '2010-12-01' }).sendEmail(params).promise();
+            // Handle promise's fulfilled/rejected states
+            await sendPromise.then((data: any) => {
+                result['messageId'] = data.MessageId;
+                result['otp'] = otp;
+            }).catch((err: any) => {
+                throw err;
+            });
+            return result;
+        } catch (error) {
+            return error;
+        }
     }
     async verifyUser(requestBody: any, responseBody: any) {
         let result: any = {};
@@ -410,9 +463,9 @@ export default class authService {
             }
             //TODO trigger otp and update user with otp
             const otp = await this.generateOtp();
-            const smsResponse: any = await this.triggerOtpMsg(requestBody.mobile);
-            if (smsResponse instanceof Error) {
-                throw smsResponse;
+            const passwordNeedToBeUpdated: any = await this.triggerOtpMsg(requestBody.mobile);
+            if (passwordNeedToBeUpdated instanceof Error) {
+                throw passwordNeedToBeUpdated;
             }
 
             const response = await this.crudService.update(user, {
@@ -446,9 +499,9 @@ export default class authService {
                 return result;
             }
             const otp = await this.generateOtp();
-            const smsResponse = this.triggerOtpMsg(requestBody.mobile);
-            if (smsResponse instanceof Error) {
-                throw smsResponse;
+            const passwordNeedToBeUpdated = this.triggerOtpMsg(requestBody.mobile);
+            if (passwordNeedToBeUpdated instanceof Error) {
+                throw passwordNeedToBeUpdated;
             }
             const user_res: any = await this.crudService.updateAndFind(user, {
                 password: await bcrypt.hashSync(otp, process.env.SALT || baseConfig.SALT)
@@ -468,12 +521,14 @@ export default class authService {
     }
     async mentorResetPassword(requestBody: any) {
         let result: any = {};
+        let otp = requestBody.otp == undefined ? true : false;
+        let passwordNeedToBeUpdated: any;
         try {
-            const mentor_res: any = await this.crudService.findOne(mentor, {
+            const mentor_res: any = await this.crudService.findOne(user, {
                 where: {
                     [Op.or]: [
                         {
-                            mobile: { [Op.like]: `%${requestBody.mobile}%` }
+                            username: requestBody.email
                         }
                     ]
                 }
@@ -485,24 +540,27 @@ export default class authService {
             const user_data = await this.crudService.findOnePassword(user, {
                 where: { user_id: mentor_res.dataValues.user_id }
             });
-
-            // const otp = await this.generateOtp();
-            let smsResponse = await this.triggerOtpMsg(requestBody.mobile);
-            if (smsResponse instanceof Error) {
-                throw smsResponse;
+            if (!otp) {
+                passwordNeedToBeUpdated = requestBody.email;
+            } else {
+                passwordNeedToBeUpdated = await this.triggerEmail(requestBody.email);
+                if (passwordNeedToBeUpdated instanceof Error) {
+                    throw passwordNeedToBeUpdated;
+                }
             }
             const findMentorDetailsAndUpdateOTP: any = await this.crudService.updateAndFind(mentor,
-                { otp: smsResponse },
+                { otp: passwordNeedToBeUpdated.otp },
                 { where: { user_id: mentor_res.dataValues.user_id } }
             );
-            smsResponse = String(smsResponse);
-            let hashString = await this.generateCryptEncryption(smsResponse)
+            passwordNeedToBeUpdated.otp = String(passwordNeedToBeUpdated.otp);
+            let hashString = await this.generateCryptEncryption(passwordNeedToBeUpdated.otp)
             const user_res: any = await this.crudService.updateAndFind(user, {
                 password: await bcrypt.hashSync(hashString, process.env.SALT || baseConfig.SALT)
             }, { where: { user_id: user_data.dataValues.user_id } })
             result['data'] = {
                 username: user_res.dataValues.username,
                 user_id: user_res.dataValues.user_id,
+                awsMessageId: passwordNeedToBeUpdated.messageId
                 // mobile: mentor_res.dataValues.mobile,
                 // reg_status: mentor_res.dataValues.reg_status
             };
@@ -682,7 +740,7 @@ export default class authService {
                 }
                 role = userResult.dataValues.role;
             }
-            const allModels: any = { "STUDENT": student, "MENTOR": mentor, "ADMIN": admin, "EVALUATER": evaluater }
+            const allModels: any = { "STUDENT": student, "MENTOR": mentor, "ADMIN": admin, "EVALUATOR": evaluator }
             const UserDetailsModel = allModels[role];
 
             const userDetailsDeleteresult = await this.crudService.delete(UserDetailsModel, { where: { user_id: user_id } })
@@ -714,7 +772,7 @@ export default class authService {
     async bulkDeleteUserWithDetails(argUserDetailsModel: any, arrayOfUserIds: any) {
         try {
 
-            // const allModels:any = {"STUDENT":student, "MENTOR":mentor, "ADMIN":admin,"EVALUATER":evaluater}
+            // const allModels:any = {"STUDENT":student, "MENTOR":mentor, "ADMIN":admin,"EVALUATOR":evaluator}
             const UserDetailsModel = argUserDetailsModel
             const resultUserDetailsDelete = await this.crudService.delete(UserDetailsModel, {
                 where: { user_id: arrayOfUserIds },

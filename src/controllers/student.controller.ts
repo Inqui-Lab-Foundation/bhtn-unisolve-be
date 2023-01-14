@@ -22,6 +22,8 @@ import { mentor } from '../models/mentor.model';
 import { organization } from '../models/organization.model';
 import { badRequest, internal, notFound } from 'boom';
 import { find } from 'lodash';
+import { string } from 'joi';
+import db from "../utils/dbconnection.util"
 
 export default class StudentController extends BaseController {
     model = "student";
@@ -46,6 +48,7 @@ export default class StudentController extends BaseController {
         this.router.put(`${this.path}/changePassword`, validationMiddleware(studentChangePasswordSchema), this.changePassword.bind(this));
         // this.router.put(`${this.path}/updatePassword`, validationMiddleware(studentChangePasswordSchema), this.updatePassword.bind(this));
         this.router.put(`${this.path}/resetPassword`, validationMiddleware(studentResetPasswordSchema), this.resetPassword.bind(this));
+        this.router.get(`${this.path}/:student_user_id/studentCertificate`, this.studentCertificate.bind(this));
         this.router.post(`${this.path}/:student_user_id/badges`, this.addBadgeToStudent.bind(this));
         this.router.get(`${this.path}/:student_user_id/badges`, this.getStudentBadges.bind(this));
         this.router.get(`${this.path}/passwordUpdate`, this.studentPasswordUpdate.bind(this));
@@ -55,7 +58,7 @@ export default class StudentController extends BaseController {
         try {
             let data: any;
             const { model, id } = req.params;
-            const paramStatus: any = req.query;
+            const paramStatus: any = req.query.status;
             if (model) {
                 this.model = model;
             };
@@ -67,9 +70,25 @@ export default class StudentController extends BaseController {
                 next(error)
             });
             const where: any = {};
-            let whereClauseStatusPart: any = {};
+            let whereClauseStatusPart: any = {}
+            let boolStatusWhereClauseRequired = false;
             if (paramStatus && (paramStatus in constents.common_status_flags.list)) {
-                whereClauseStatusPart = { "status": paramStatus }
+                if (paramStatus === 'ALL') {
+                    whereClauseStatusPart = {};
+                    boolStatusWhereClauseRequired = false;
+                } else {
+                    whereClauseStatusPart = { "status": paramStatus };
+                    boolStatusWhereClauseRequired = true;
+                }
+            } else {
+                whereClauseStatusPart = { "status": "ACTIVE" };
+                boolStatusWhereClauseRequired = true;
+            };
+            let district: any = req.query.district;
+            let districtFilter: any = {}
+            if (district) {
+                districtFilter['whereClause'] = district && typeof district == 'string' && district !== 'All Districts' ? { district } : {}
+                districtFilter["liter"] = district && typeof district == 'string' && district !== 'All Districts' ? db.literal('`team->mentor->organization`.`district` = ' + JSON.stringify(district)) : {}
             }
             if (id) {
                 where[`${this.model}_id`] = req.params.id;
@@ -122,13 +141,51 @@ export default class StudentController extends BaseController {
             } else {
                 try {
                     const responseOfFindAndCountAll = await this.crudService.findAndCountAll(modelClass, {
+                        attributes: [
+                            "student_id",
+                            "user_id",
+                            "UUID",
+                            "full_name",
+                            "date_of_birth",
+                            "qualification",
+                            "badges",
+                            "status",
+                            "Age",
+                            "Grade",
+                            "Gender"
+                        ],
                         where: {
                             [Op.and]: [
                                 whereClauseStatusPart,
-                                condition
+                                condition,
+                                districtFilter.liter
                             ]
+                        },
+                        include: {
+                            model: team,
+                            attributes: [
+                                'team_id',
+                                'team_name',
+                            ],
+                            include: {
+                                model: mentor,
+                                attributes: [
+                                    'mentor_id',
+                                    'full_name'
+                                ],
+                                include: {
+                                    where: districtFilter.whereClause,
+                                    required: false,
+                                    model: organization,
+                                    attributes: [
+                                        'organization_name',
+                                        'organization_code',
+                                        "district"
+                                    ]
+                                }
+                            }
                         }, limit, offset
-                    })
+                    });
                     const result = this.getPagingData(responseOfFindAndCountAll, page, limit);
                     data = result;
                 } catch (error: any) {
@@ -167,14 +224,16 @@ export default class StudentController extends BaseController {
             };
             const user_id = res.locals.user_id
             const studentTableDetails = await student.findOne(
-                {where:{
-                    student_id:id
-                }}
+                {
+                    where: {
+                        student_id: id
+                    }
+                }
             )
-            if(!studentTableDetails){
+            if (!studentTableDetails) {
                 throw notFound(speeches.USER_NOT_FOUND)
             }
-            if(studentTableDetails instanceof Error){
+            if (studentTableDetails instanceof Error) {
                 throw studentTableDetails
             }
 
@@ -182,51 +241,51 @@ export default class StudentController extends BaseController {
             where[`${this.model}_id`] = req.params.id;
             const modelLoaded = await this.loadModel(model);
             const payload = this.autoFillTrackingColumns(req, res, modelLoaded);
+            if (req.body.full_name) {
+                if (req.body.full_name.trim() != studentTableDetails.getDataValue("full_name").trim()) {
 
-            if(req.body.full_name.trim() != studentTableDetails.getDataValue("full_name").trim()){
-                
-                let trimmedTeamName: any;
-                let trimmedStudentName: any;
-                trimmedStudentName = req.body.full_name.replace(/[\n\r\s\t]+/g, '').toLowerCase();
-                const studentPassword = `${trimmedStudentName}1234`
-                const cryptoEncryptedString = await this.authService.generateCryptEncryption(studentPassword);
-                const teamDetails = await this.authService.crudService.findOne(team, { where: { team_id: req.body.team_id } });
-                if (!teamDetails) {
-                    return res.status(406).send(dispatcher(res, null, 'error', speeches.TEAM_NOT_FOUND, 406));
-                } else {
-                    trimmedTeamName = teamDetails.dataValues.team_name.replace(/[\n\r\s\t\_]+/g, '').toLowerCase();
-                }
-                const username = trimmedTeamName + '_' + trimmedStudentName;
-                payload['qualification'] = cryptoEncryptedString
-                payload['UUID'] = studentPassword;
-                const studentDetails = await this.crudService.findOne(user, { where: { username: username } });
-                // console.log(studentDetails);
-                
-                if (studentDetails) {
-                    if (studentDetails.dataValues.username == username) throw badRequest(speeches.USER_FULLNAME_EXISTED);
-                    if (studentDetails instanceof Error) throw studentDetails;
-                };   
-                const user_data = await this.crudService.update(user, {
-                    full_name: payload.full_name,
-                    username: username,
-                    password: await bcrypt.hashSync(cryptoEncryptedString, process.env.SALT || baseConfig.SALT),
-                }, { where: { user_id: studentTableDetails.getDataValue("user_id") } });
-                if(!user_data){
-                    throw internal()
-                }
-                if (user_data instanceof Error) {
-                    throw user_data;
-                }
+                    let trimmedTeamName: any;
+                    let trimmedStudentName: any;
+                    trimmedStudentName = req.body.full_name.replace(/[\n\r\s\t]+/g, '').toLowerCase();
+                    const studentPassword = `${trimmedStudentName}1234`
+                    const cryptoEncryptedString = await this.authService.generateCryptEncryption(studentPassword);
+                    const teamDetails = await this.authService.crudService.findOne(team, { where: { team_id: req.body.team_id } });
+                    if (!teamDetails) {
+                        return res.status(406).send(dispatcher(res, null, 'error', speeches.TEAM_NOT_FOUND, 406));
+                    } else {
+                        trimmedTeamName = teamDetails.dataValues.team_name.replace(/[\n\r\s\t\_]+/g, '').toLowerCase();
+                    }
+                    const username = trimmedTeamName + '_' + trimmedStudentName;
+                    payload['qualification'] = cryptoEncryptedString
+                    payload['UUID'] = studentPassword;
+                    const studentDetails = await this.crudService.findOne(user, { where: { username: username } });
+                    // console.log(studentDetails);
 
+                    if (studentDetails) {
+                        if (studentDetails.dataValues.username == username) throw badRequest(speeches.USER_FULLNAME_EXISTED);
+                        if (studentDetails instanceof Error) throw studentDetails;
+                    };
+                    const user_data = await this.crudService.update(user, {
+                        full_name: payload.full_name,
+                        username: username,
+                        password: await bcrypt.hashSync(cryptoEncryptedString, process.env.SALT || baseConfig.SALT),
+                    }, { where: { user_id: studentTableDetails.getDataValue("user_id") } });
+                    if (!user_data) {
+                        throw internal()
+                    }
+                    if (user_data instanceof Error) {
+                        throw user_data;
+                    }
+                }
             }
             const student_data = await this.crudService.updateAndFind(modelLoaded, payload, { where: where });
-            if (!student_data ) {
+            if (!student_data) {
                 throw badRequest()
             }
             if (student_data instanceof Error) {
                 throw student_data;
             }
-            
+
             return res.status(200).send(dispatcher(res, student_data, 'updated'));
         } catch (error) {
             next(error);
@@ -578,6 +637,33 @@ export default class StudentController extends BaseController {
             };
             const data = { no_of_students_updated: count }
             return res.status(200).send(dispatcher(res, data, 'updated'));
+        } catch (error) {
+            next(error);
+        }
+    }
+    private async studentCertificate(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            const { model, student_user_id } = req.params;
+            const user_id = res.locals.user_id
+            if (model) {
+                this.model = model;
+            };
+            const where: any = {};
+            where[`${this.model}_id`] = req.params.id;
+            const modelLoaded = await this.loadModel(model);
+            const payload = this.autoFillTrackingColumns(req, res, modelLoaded);
+            payload["certificate"] = new Date().toLocaleString();
+            console.log(payload);
+            const updateCertificate = await this.crudService.updateAndFind(student, payload, {
+                where: { student_id: student_user_id }
+            });
+            if (!updateCertificate) {
+                throw internal()
+            }
+            if (updateCertificate instanceof Error) {
+                throw updateCertificate;
+            }
+            return res.status(200).send(dispatcher(res, updateCertificate, 'Certificate Updated'));
         } catch (error) {
             next(error);
         }

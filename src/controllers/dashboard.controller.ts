@@ -6,7 +6,7 @@ import authService from '../services/auth.service';
 import BaseController from './base.controller';
 import ValidationsHolder from '../validations/validationHolder';
 import db from "../utils/dbconnection.util";
-import { Op } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import DashboardMapStatsJob from '../jobs/dashboardMapStats.jobs';
 import { dashboard_map_stat } from '../models/dashboard_map_stat.model';
 import DashboardService from '../services/dashboard.service';
@@ -49,9 +49,12 @@ export default class DashboardController extends BaseController {
         this.router.get(`${this.path}/studentStats/:student_user_id`, this.getStudentStats.bind(this))
         this.router.get(`${this.path}/studentStats/:student_user_id/challenges`, this.getStudentChallengeDetails.bind(this))
         this.router.get(`${this.path}/studentStats/:student_user_id/teamProgress`, this.getTeamProgress.bind(this))
-        
+
         //team stats..
         this.router.get(`${this.path}/teamStats/:team_id`, this.getTeamStats.bind(this));
+
+        //evaluator stats..
+        this.router.get(`${this.path}/evaluatorStats`, this.getEvaluatorStats.bind(this));
 
         super.initializeRoutes();
     }
@@ -89,7 +92,7 @@ export default class DashboardController extends BaseController {
                             from teams as t
                             where 
                             ${addWhereClauseStatusPart ? "t." + whereClauseStatusPartLiteral : whereClauseStatusPartLiteral}
-                            and t.mentor_id=\`mentor\`.\`user_id\`)
+                            and t.mentor_id=\`mentor\`.\`mentor_id\`)
                             )`),
                         "students_count"
                     ],
@@ -102,7 +105,7 @@ export default class DashboardController extends BaseController {
                             from teams as t
                             where 
                             ${addWhereClauseStatusPart ? "t." + whereClauseStatusPartLiteral : whereClauseStatusPartLiteral}
-                            and t.mentor_id=\`mentor\`.\`user_id\`) 
+                            and t.mentor_id=\`mentor\`.\`mentor_id\`)
                         and c.status not in ('DRAFT')
                         )`),
                         "ideas_count"
@@ -286,6 +289,20 @@ export default class DashboardController extends BaseController {
                             )`),
                         "quiz_completed_count"
                     ],
+                    [
+                        db.literal(`(
+                            ${serviceDashboard.getDbLieralForPostSurveyCreatedAt(addWhereClauseStatusPart,
+                            whereClauseStatusPartLiteral)}
+                            )`),
+                        "post_survey_completed_date"
+                    ],
+                    [
+                        db.literal(`(
+                            ${serviceDashboard.getDbLieralForCourseCompletedCreatedAt(addWhereClauseStatusPart,
+                            whereClauseStatusPartLiteral)}
+                            )`),
+                        "course_completed_date"
+                    ],
                     "badges"
                 ]
             })
@@ -393,6 +410,28 @@ export default class DashboardController extends BaseController {
                             )`),
                         "quiz_completed_count"
                     ],
+                    [
+                        db.literal(`(
+                            ${serviceDashboard.getDbLieralForPreSurveyStatus(addWhereClauseStatusPart,
+                            whereClauseStatusPartLiteral)}
+                            )`),
+                        "pre_survey_status"
+                    ],
+                    [
+                        db.literal(`(
+                            ${serviceDashboard.getDbLieralForPostSurveyStatus(addWhereClauseStatusPart,
+                            whereClauseStatusPartLiteral)}
+                            )`),
+                        "post_survey_status"
+                    ],
+                    [
+                        db.literal(`(
+                            ${serviceDashboard.getDbLieralIdeaSubmission(addWhereClauseStatusPart,
+                            whereClauseStatusPartLiteral)}
+                            )`),
+                        "idea_submission"
+                    ],
+                    "certificate",
                     "badges",
                     "created_at",
                     "full_name",
@@ -445,7 +484,8 @@ export default class DashboardController extends BaseController {
             let result: any = {
                 end_date: "20th November 2022 at 12pm"
             }
-            let teamMembers: any = await studentService.getTeamMembersForUserId(student_user_id)
+            let teamMembers: any = null
+            teamMembers = await studentService.getTeamMembersForUserId(student_user_id)
             if (!teamMembers) {
                 teamMembers = []
             }
@@ -455,7 +495,7 @@ export default class DashboardController extends BaseController {
             result = {
                 ...result,
                 "challenge_submission_status": challenge_submission_status,
-                "team_members": teamMembers
+                // "team_members": teamMembers
             }
             // console.log("teamMembers",teamMembers)
             if (teamMembers.length <= 0) {
@@ -481,7 +521,7 @@ export default class DashboardController extends BaseController {
             result = {
                 ...result,
                 "challenge_submission_status": challenge_submission_status,
-                "team_members": teamMembers
+                // "team_members": teamMembers
             }
             res.status(200).send(dispatcher(res, result, "success"))
             return;
@@ -539,7 +579,12 @@ export default class DashboardController extends BaseController {
     private async getMapStats(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
         try {
             this.model = dashboard_map_stat.name
-            return await this.getData(req, res, next)
+            return await this.getData(req, res, next, [],
+                [
+                    [db.fn('DISTINCT', db.col('district_name')), 'district_name'],
+                    "dashboard_map_stat_id", "district_name", "overall_schools", "reg_schools", "teams", "ideas", "students", "status","created_by", "created_at", "updated_by", "updated_at", "schools_with_teams", "boys", "girls", "youth_center"
+                ]
+            )
         } catch (error) {
             next(error);
         }
@@ -555,4 +600,34 @@ export default class DashboardController extends BaseController {
             next(error);
         }
     };
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////// EVALUATOR STATS
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    protected async getEvaluatorStats(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let response: any = {};
+            const submitted_count = await db.query("SELECT count(challenge_response_id) as 'submitted_count' FROM challenge_responses where status = 'SUBMITTED'", { type: QueryTypes.SELECT });
+            const selected_round_one_count = await db.query("SELECT count(challenge_response_id) as 'selected_round_one_count' FROM challenge_responses where evaluation_status = 'SELECTEDROUND1'", { type: QueryTypes.SELECT });
+            const rejected_round_one_count = await db.query("SELECT count(challenge_response_id) as 'rejected_round_one_count' FROM challenge_responses where evaluation_status = 'REJECTEDROUND1'", { type: QueryTypes.SELECT });
+            console.log(submitted_count, selected_round_one_count, rejected_round_one_count);
+            if (!submitted_count || !rejected_round_one_count || !selected_round_one_count) {
+                throw notFound(speeches.DATA_NOT_FOUND)
+            }
+            if (submitted_count instanceof Error) {
+                throw submitted_count
+            }
+            if (selected_round_one_count instanceof Error) {
+                throw selected_round_one_count
+            }
+            if (rejected_round_one_count instanceof Error) {
+                throw rejected_round_one_count
+            };
+            response['submitted_count'] = Object.values(submitted_count[0]).toString()
+            response['selected_round_one_count'] = Object.values(selected_round_one_count[0]).toString()
+            response["rejected_round_one_count"] = Object.values(rejected_round_one_count[0]).toString()
+            res.status(200).send(dispatcher(res, response, "success"))
+        } catch (err) {
+            next(err)
+        }
+    }
 };
