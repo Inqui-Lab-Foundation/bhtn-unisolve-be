@@ -522,12 +522,13 @@ export default class authService {
     async mentorResetPassword(requestBody: any) {
         let result: any = {};
         let mentor_res: any;
+        let mentor_id: any = requestBody.mentor_id;
         let otp = requestBody.otp == undefined ? true : false;
         let passwordNeedToBeUpdated: any = {};
         try {
             if (!otp) {
                 mentor_res = await this.crudService.findOne(mentor, {
-                    where: { organization_code: requestBody.organization_code }
+                    where: { [Op.and]: [{ organization_code: requestBody.organization_code }, { mentor_id }] }
                 });
             } else {
                 mentor_res = await this.crudService.findOne(user, {
