@@ -23,6 +23,7 @@ import { user_topic_progress } from "../models/user_topic_progress.model";
 import { worksheet_response } from "../models/worksheet_response.model";
 import { mentor_topic_progress } from '../models/mentor_topic_progress.model';
 import { constents } from '../configs/constents.config';
+import AWS from 'aws-sdk';
 export default class authService {
     crudService: CRUDService = new CRUDService;
     private otp = '112233';

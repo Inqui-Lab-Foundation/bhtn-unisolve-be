@@ -103,10 +103,6 @@ export default class DashboardService extends BaseService {
             const overAllSchool = await this.crudService.findAll(organization, {
                 where: whereClause
             });
-            // if(argdistric=="b"){
-            //     console.log(argdistric)
-            //     console.log(overAllSchool)
-            // }
             if (!overAllSchool || (!overAllSchool.length) || overAllSchool.length == 0) {
                 return {
                     schoolIdsInDistrict: schoolIdsInDistrict,
@@ -114,10 +110,6 @@ export default class DashboardService extends BaseService {
                     teamIdInDistrict: teamIdInDistrict,
                     challengeInDistrict: challengeInDistrict,
                     studentsInDistric: studentsInDistric,
-                    schoolIdsInDistrictWithTeams: schoolIdsInDistrictWithTeams
-                }
-            }
-            schoolIdsInDistrict = overAllSchool.map((Element: any) => Element.dataValues.organization_code);
                     schoolIdsInDistrictWithTeams: schoolIdsInDistrictWithTeams,
                     studentBoys: studentBoys,
                     studentGirls: studentGirls,
