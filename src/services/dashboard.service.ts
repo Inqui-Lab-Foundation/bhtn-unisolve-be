@@ -7,7 +7,10 @@ import { team } from "../models/team.model";
 import BaseService from "./base.service";
 
 export default class DashboardService extends BaseService {
-
+    /**
+     * truncates the data in dashboard map stats tables and re entries
+     * @returns Object 
+     */
     async resetMapStats() {
         try {
             let uniqueDistricts: any;
@@ -66,7 +69,12 @@ export default class DashboardService extends BaseService {
             return err
         }
     }
-
+    
+    /**
+     * Get map stats data with based on district
+     * @param argdistric String default set to null
+     * @returns object
+     */
     async getMapStatsForDistrict(argdistric: any = null) {
         try {
             let whereClause = {}
@@ -95,10 +103,6 @@ export default class DashboardService extends BaseService {
             const overAllSchool = await this.crudService.findAll(organization, {
                 where: whereClause
             });
-            // if(argdistric=="b"){
-            //     console.log(argdistric)
-            //     console.log(overAllSchool)
-            // }
             if (!overAllSchool || (!overAllSchool.length) || overAllSchool.length == 0) {
                 return {
                     schoolIdsInDistrict: schoolIdsInDistrict,
@@ -278,12 +282,13 @@ export default class DashboardService extends BaseService {
             return err
         }
     }
-
-
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ////////////////////////  Dashboard student helpers....!!                 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Dashboard student helpers....!!
+    /**
+     * All course topic count
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForAllToipcsCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
              select count(t.course_topic_id) 
@@ -292,18 +297,43 @@ export default class DashboardService extends BaseService {
              ${addWhereClauseStatusPart ? "t." + whereClauseStatusPartLiteral : whereClauseStatusPartLiteral}
              `
     }
+    /**
+     * All course topic count where topic type is VIDEO
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForAllToipcVideosCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return this.getDbLieralForAllToipcsCount(addWhereClauseStatusPart, whereClauseStatusPartLiteral) +
             `and t.topic_type = "VIDEO"`
     }
+    /**
+     * All course topic count where topic type is WORKSHEET
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForAllToipcWorksheetCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return this.getDbLieralForAllToipcsCount(addWhereClauseStatusPart, whereClauseStatusPartLiteral) +
             `and t.topic_type = "WORKSHEET"`
     }
+    /**
+     * All course topic count where topic type is QUIZ
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForAllToipcQuizCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return this.getDbLieralForAllToipcsCount(addWhereClauseStatusPart, whereClauseStatusPartLiteral) +
             `and t.topic_type = "QUIZ"`
     }
+    /**
+     * Get user_ids who completed Topics
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @param whereOperation String
+     * @returns Object
+     */
     getDbLieralCommPartToipcsCompletedCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any, whereOperation: any) {
         return `
         select utp.user_id
@@ -317,7 +347,12 @@ export default class DashboardService extends BaseService {
                 group by utp.user_id,utp.course_topic_id
         `
     }
-
+    /**
+     * Count completed Topics for user
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForAllToipcsCompletedCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
             select count(*) from (
@@ -325,53 +360,95 @@ export default class DashboardService extends BaseService {
             ) as count
         `
     }
+    /**
+     * count for per survey status for student 
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForPreSurveyStatus(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
             select count(*) from quiz_survey_responses as preSurvey where preSurvey.user_id = \`student\`.\`user_id\` and preSurvey.quiz_survey_id = 2 is true
         `
     }
+    /**
+     * count for post survey status for student 
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForPostSurveyStatus(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
             select count(*) from quiz_survey_responses as preSurvey where preSurvey.user_id = \`student\`.\`user_id\` and preSurvey.quiz_survey_id = 4 is true
         `
     }
+    /**
+     * count for idea submission for student
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralIdeaSubmission(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
         select count(*) from challenge_responses as idea where idea.team_id = \`student\`.\`team_id\` and status = "SUBMITTED"
         `
     }
+    /**
+     * All course topic count where topic type is VIDEO
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForVideoToipcsCompletedCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
             select count(*) from (
             ${this.getDbLieralCommPartToipcsCompletedCount(addWhereClauseStatusPart, whereClauseStatusPartLiteral, 'and t.topic_type = "VIDEO"')}
             ) as count
         `
-        //  return this.getDbLieralForAllToipcsCompletedCount(addWhereClauseStatusPart,whereClauseStatusPartLiteral)+
-        //  `and t.topic_type = "VIDEO"`
     }
+    /**
+     * All course topic count where topic type is WORKSHEET
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForWorksheetToipcsCompletedCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
             select count(*) from (
             ${this.getDbLieralCommPartToipcsCompletedCount(addWhereClauseStatusPart, whereClauseStatusPartLiteral, ' and t.topic_type = "WORKSHEET"')}
             ) as count
         `
-        //  return this.getDbLieralForAllToipcsCompletedCount(addWhereClauseStatusPart,whereClauseStatusPartLiteral)+
-        //  `and t.topic_type = "WORKSHEET"`
     }
+    /**
+     * All course topic count where topic type is QUIZ
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForQuizToipcsCompletedCount(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
             select count(*) from (
             ${this.getDbLieralCommPartToipcsCompletedCount(addWhereClauseStatusPart, whereClauseStatusPartLiteral, 'and t.topic_type = "QUIZ"')}
             ) as count
         `
-        //  return this.getDbLieralForAllToipcsCompletedCount(addWhereClauseStatusPart,whereClauseStatusPartLiteral)+
-        //  `and t.topic_type = "QUIZ"`
     }
+    /**
+     * get created_at for student user from quiz survey responses
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForPostSurveyCreatedAt(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
             SELECT created_at FROM unisolve_db.quiz_survey_responses where quiz_survey_id = 4 and user_Id = \`student\`.\`user_id\`
             `
     }
+    /**
+     * get created_at for student user from user_topic_progress
+     * @param addWhereClauseStatusPart String
+     * @param whereClauseStatusPartLiteral String
+     * @returns Object
+     */
     getDbLieralForCourseCompletedCreatedAt(addWhereClauseStatusPart: any, whereClauseStatusPartLiteral: any) {
         return `
             select created_at from user_topic_progress as utp where 1=1 and  utp.status = "COMPLETED" and course_topic_id = 34 and utp.user_id = \`student\`.\`user_id\` 
