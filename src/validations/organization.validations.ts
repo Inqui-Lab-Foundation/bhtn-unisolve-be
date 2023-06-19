@@ -27,6 +27,7 @@ export const organizationRawSchema = Joi.object().keys({
     principal_name: Joi.any(),
     principal_mobile: Joi.any(),
     principal_email: Joi.any(),
+    organization_type: Joi.string(),
     city: Joi.any(),
     state: Joi.any(),
     country: Joi.any(),
