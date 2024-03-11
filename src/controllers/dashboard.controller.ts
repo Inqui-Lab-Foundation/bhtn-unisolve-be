@@ -58,6 +58,17 @@ export default class DashboardController extends BaseController {
         this.router.get(`${this.path}/evaluatorStats`, this.getEvaluatorStats.bind(this));
         //loggedInUserCount
         this.router.get(`${this.path}/loggedInUserCount`, this.getLoggedInUserCount.bind(this));
+        //singledashboard common api's 
+        this.router.get(`${this.path}/teamCount`, this.getteamCount.bind(this));
+        this.router.get(`${this.path}/studentCount`, this.getstudentCount.bind(this));
+        //singledashboard admin api's
+        this.router.get(`${this.path}/studentCourseCount`, this.getstudentCourseCount.bind(this));
+        this.router.get(`${this.path}/ideasCount`, this.getideasCount.bind(this));
+        this.router.get(`${this.path}/mentorCount`, this.getmentorCount.bind(this));
+        this.router.get(`${this.path}/studentCountbygender`, this.getstudentCountbygender.bind(this));
+        this.router.get(`${this.path}/schoolCount`, this.getSchoolCount.bind(this));
+        this.router.get(`${this.path}/mentorCourseCount`, this.getmentorCourseCount.bind(this));
+        this.router.get(`${this.path}/schoolRegCount`, this.getschoolRegCount.bind(this));
 
         super.initializeRoutes();
     }
@@ -585,7 +596,7 @@ export default class DashboardController extends BaseController {
             return await this.getData(req, res, next, [],
                 [
                     [db.fn('DISTINCT', db.col('district_name')), 'district_name'],
-                    "dashboard_map_stat_id", "district_name", "overall_schools", "reg_schools", "teams", "ideas", "students", "status","created_by", "created_at", "updated_by", "updated_at", "schools_with_teams", "boys", "girls", "youth_center"
+                    "dashboard_map_stat_id", "district_name", "overall_schools", "reg_schools", "teams", "ideas", "students", "status", "created_by", "created_at", "updated_by", "updated_at", "schools_with_teams", "boys", "girls", "youth_center"
                 ]
             )
         } catch (error) {
@@ -696,6 +707,239 @@ export default class DashboardController extends BaseController {
             })
             res.status(200).send(dispatcher(res, response, "success"))
         } catch (err) {
+            next(err)
+        }
+    }
+    protected async getstudentCourseCount(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let result: any = {};
+
+            const StudentCoursesCompletedCount = await db.query(`SELECT 
+            count(st.student_id) as studentCourseCMP
+        FROM
+            students AS st
+                JOIN
+            teams AS te ON st.team_id = te.team_id
+                JOIN
+            mentors AS mn ON te.mentor_id = mn.mentor_id
+                JOIN
+            organizations AS og ON mn.organization_code = og.organization_code
+                JOIN
+            (SELECT 
+                user_id, COUNT(*)
+            FROM
+                user_topic_progress
+            GROUP BY user_id
+            HAVING COUNT(*) >= 34) AS temp ON st.user_id = temp.user_id WHERE og.status='ACTIVE';`, { type: QueryTypes.SELECT });
+            const started = await db.query(`SELECT 
+            count(st.student_id) as studentCoursestartted
+        FROM
+            students AS st
+                JOIN
+            teams AS te ON st.team_id = te.team_id
+                JOIN
+            mentors AS mn ON te.mentor_id = mn.mentor_id
+                JOIN
+            organizations AS og ON mn.organization_code = og.organization_code
+                JOIN
+            (SELECT 
+                DISTINCT user_id
+            FROM
+                user_topic_progress ) AS temp ON st.user_id = temp.user_id WHERE og.status='ACTIVE';`, { type: QueryTypes.SELECT });
+            result['StudentCoursesCompletedCount'] = Object.values(StudentCoursesCompletedCount[0]).toString()
+            result['started'] = Object.values(started[0]).toString()
+            res.status(200).send(dispatcher(res, result, 'done'))
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+    protected async getideasCount(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let result: any = {};
+
+            const fullCount = await db.query(`SELECT 
+            count(te.team_id) as initiated
+        FROM
+            teams AS te
+                JOIN
+            mentors AS mn ON te.mentor_id = mn.mentor_id
+                JOIN
+            organizations AS og ON mn.organization_code = og.organization_code
+                JOIN
+            (SELECT 
+                team_id, status
+            FROM
+                challenge_responses) AS temp ON te.team_id = temp.team_id WHERE og.status='ACTIVE'`, { type: QueryTypes.SELECT });
+            const submittedCount = await db.query(`SELECT 
+            count(te.team_id) as submittedCount
+        FROM
+            teams AS te
+                JOIN
+            mentors AS mn ON te.mentor_id = mn.mentor_id
+                JOIN
+            organizations AS og ON mn.organization_code = og.organization_code
+                JOIN
+            (SELECT 
+                team_id, status
+            FROM
+                challenge_responses
+            WHERE
+                status = 'SUBMITTED') AS temp ON te.team_id = temp.team_id WHERE og.status='ACTIVE'`, { type: QueryTypes.SELECT })
+            result['initiated_ideas'] = Object.values(fullCount[0]).toString()
+            result['submitted_ideas'] = Object.values(submittedCount[0]).toString()
+            res.status(200).send(dispatcher(res, result, 'done'))
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+
+    protected async getmentorCount(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let result: any = {};
+            const mentorCount = await db.query(`SELECT 
+            COUNT(mn.mentor_id) AS totalmentor
+        FROM
+            organizations AS og
+                LEFT JOIN
+            mentors AS mn ON og.organization_code = mn.organization_code
+            WHERE og.status='ACTIVE';`, { type: QueryTypes.SELECT });
+            result['mentorCount'] = Object.values(mentorCount[0]).toString()
+            res.status(200).send(dispatcher(res, result, 'done'))
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+    protected async getstudentCountbygender(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let result: any = {};
+            const student = await db.query(`SELECT 
+            SUM(CASE
+                WHEN st.gender = 'MALE' THEN 1
+                ELSE 0
+            END) AS male,
+            SUM(CASE
+                WHEN st.gender = 'FEMALE' THEN 1
+                ELSE 0
+            END) AS female
+        FROM
+            organizations AS og
+                LEFT JOIN
+            mentors AS mn ON og.organization_code = mn.organization_code
+                INNER JOIN
+            teams AS t ON mn.mentor_id = t.mentor_id
+                INNER JOIN
+            students AS st ON st.team_id = t.team_id
+            WHERE og.status='ACTIVE';`, { type: QueryTypes.SELECT });
+            result['studentMale'] = Object.values(student[0])[0] !== null ? Object.values(student[0])[0].toString() : 0;
+            result['studentFemale'] = Object.values(student[0])[1] !== null ? Object.values(student[0])[1].toString() : 0;
+            res.status(200).send(dispatcher(res, result, 'done'))
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+    protected async getSchoolCount(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let result: any = {};
+            result = await db.query(`SELECT count(*) as schoolCount FROM organizations WHERE status='ACTIVE';`, { type: QueryTypes.SELECT })
+            res.status(200).send(dispatcher(res, result, 'done'))
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+    protected async getmentorCourseCount(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let result: any = {};
+            result = await db.query(`select count(*) as mentorCoursesCompletedCount from (SELECT 
+            district,cou
+        FROM
+            unisolve_db.organizations AS og
+                LEFT JOIN
+            (SELECT 
+                organization_code, cou
+            FROM
+                unisolve_db.mentors AS mn
+            LEFT JOIN (SELECT 
+                user_id, COUNT(*) AS cou
+            FROM
+                unisolve_db.mentor_topic_progress
+            GROUP BY user_id having count(*)>=8) AS t ON mn.user_id = t.user_id ) AS c ON c.organization_code = og.organization_code WHERE og.status='ACTIVE'
+        having cou>=8) as final`, { type: QueryTypes.SELECT })
+            res.status(200).send(dispatcher(res, result, 'done'))
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+    protected async getschoolRegCount(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            const mentorCount = await db.query(`SELECT 
+            COUNT(DISTINCT mn.organization_code) AS RegSchools
+        FROM
+            organizations AS og
+                LEFT JOIN
+            mentors AS mn ON og.organization_code = mn.organization_code
+        WHERE
+            og.status = 'ACTIVE';`, { type: QueryTypes.SELECT });
+            res.status(200).send(dispatcher(res, mentorCount, 'done'))
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+    protected async getteamCount(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let result: any = {};
+            const { mentor_id } = req.query
+            if (mentor_id) {
+                result = await db.query(`SELECT count(*) as teams_count FROM teams where mentor_id = ${mentor_id}`, { type: QueryTypes.SELECT });
+            }
+            else {
+                result = await db.query(`SELECT 
+                COUNT(t.team_id) AS teams_count
+            FROM
+                organizations AS og
+                    LEFT JOIN
+                mentors AS mn ON og.organization_code = mn.organization_code
+                    INNER JOIN
+                teams AS t ON mn.mentor_id = t.mentor_id
+                WHERE og.status='ACTIVE';`, { type: QueryTypes.SELECT });
+
+            }
+            res.status(200).send(dispatcher(res, result, 'done'))
+        }
+        catch (err) {
+            next(err)
+        }
+    }
+    protected async getstudentCount(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+        try {
+            let result: any = {};
+            const { mentor_id } = req.query
+            if (mentor_id) {
+                result = await db.query(`SELECT count(*) as student_count FROM students join teams on students.team_id = teams.team_id  where mentor_id = ${mentor_id};`, { type: QueryTypes.SELECT });
+            }
+            else {
+                result = await db.query(`SELECT 
+                COUNT(st.student_id) AS student_count
+            FROM
+                organizations AS og
+                    LEFT JOIN
+                mentors AS mn ON og.organization_code = mn.organization_code
+                    INNER JOIN
+                teams AS t ON mn.mentor_id = t.mentor_id
+                    INNER JOIN
+                students AS st ON st.team_id = t.team_id
+                WHERE og.status='ACTIVE';`, { type: QueryTypes.SELECT });
+
+            }
+            res.status(200).send(dispatcher(res, result, 'done'))
+        }
+        catch (err) {
             next(err)
         }
     }
