@@ -1203,20 +1203,31 @@ export default class ReportController extends BaseController {
                 themesFilter = `'${sdg}'`
             }
             const summary = await db.query(`SELECT 
-            organization_code,
-            district,
+            org.organization_code,
+            org.district,
             challenge_response_id,
             organization_name,
             organization_type,
             full_name,
-            mobile,
             team_name,
-            students_names AS 'Students names',
+            (SELECT 
+                    GROUP_CONCAT(full_name
+                            SEPARATOR ', ') AS names
+                FROM
+                    students
+                WHERE
+                    teams.team_id = students.team_id) AS 'Students names',
             sdg,
             response
         FROM
-            idea_report
-            where status = 'SUBMITTED' && district like ${districtFilter} && sdg like ${themesFilter} && organization_type like ${categoryFilter};`, { type: QueryTypes.SELECT });
+            challenge_responses AS cha
+                JOIN
+            teams ON cha.team_id = teams.team_id
+                JOIN
+            mentors AS m ON teams.mentor_id = m.mentor_id
+                JOIN
+            organizations AS org ON m.organization_code = org.organization_code
+            where cha.status = 'SUBMITTED' && org.district like ${districtFilter} && cha.sdg like ${themesFilter} && organization_type like ${categoryFilter};`, { type: QueryTypes.SELECT });
             data = summary;
             if (!data) {
                 throw notFound(speeches.DATA_NOT_FOUND)
