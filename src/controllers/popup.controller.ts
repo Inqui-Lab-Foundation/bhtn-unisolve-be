@@ -1,10 +1,10 @@
 import { popupSchema, popupUpdateSchema } from "../validations/popup.validation";
 import ValidationsHolder from "../validations/validationHolder";
 import BaseController from "./base.controller";
-import { S3 } from "aws-sdk";
-import fs from 'fs';
-import { Request, Response, NextFunction } from 'express';
-import dispatcher from "../utils/dispatch.util";
+// import { S3 } from "aws-sdk";
+// import fs from 'fs';
+// import { Request, Response, NextFunction } from 'express';
+// import dispatcher from "../utils/dispatch.util";
 
 export default class popupController extends BaseController {
 
