@@ -40,6 +40,7 @@ import EvaluatorRatingController from "./controllers/evaluator_rating.controller
 import InstructionController from "./controllers/instructions.controller";
 import EvaluationProcess from "./controllers/evaluation_process.controller";
 import LatestNewsController from "./controllers/latest_news.controller";
+import popupController from "./controllers/popup.controller";
 
 // validating env variables
 validateEnv();
@@ -86,6 +87,7 @@ try {
         new InstructionController,
         new EvaluationProcess,
         new LatestNewsController,
+        new popupController
     ], Number(process.env.APP_PORT));
     // starting app
     app.listen();
