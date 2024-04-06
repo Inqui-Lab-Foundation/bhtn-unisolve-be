@@ -116,6 +116,13 @@ export default class TeamController extends BaseController {
                             FROM challenge_responses AS idea
                             WHERE idea.team_id = \`team\`.\`team_id\`
                         )`), 'challenge_response_id'
+                    ],
+                    [
+                        db.literal(`(
+                            SELECT evaluation_status
+                            FROM challenge_responses AS idea
+                            WHERE idea.team_id = \`team\`.\`team_id\`
+                        )`), 'evaluation_status'
                     ]
                 ]
             } else {
@@ -137,6 +144,13 @@ export default class TeamController extends BaseController {
                             AND
                                 s.team_id = \`team\`.\`team_id\`
                         )`), 'student_count'
+                    ],
+                    [
+                        db.literal(`(
+                            SELECT evaluation_status
+                            FROM challenge_responses AS idea
+                            WHERE idea.team_id = \`team\`.\`team_id\`
+                        )`), 'evaluation_status'
                     ]
                 ]
             }
